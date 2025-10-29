@@ -1,6 +1,6 @@
 """
-app.py - Bot Paris Foot Pro avec Backtesting
-Version avec simulation de performances
+app.py - Bot Paris Foot Pro avec Backtesting Avancé
+Version avec comparaisons et objectifs de profit
 """
 
 import streamlit as st
@@ -81,6 +81,25 @@ def inject_css():
         letter-spacing: 1px;
     }
     
+    .comparison-card {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        border-radius: 16px;
+        padding: 2rem;
+        margin: 1rem 0;
+        border: 1px solid rgba(102, 126, 234, 0.3);
+    }
+    
+    .winner-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        margin-left: 1rem;
+    }
+    
     .success-card {
         background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
         border-left: 4px solid #10b981;
@@ -94,6 +113,14 @@ def inject_css():
         border-left: 4px solid #f59e0b;
         padding: 1.5rem;
         border-radius: 12px;
+        margin: 1rem 0;
+    }
+    
+    .goal-card {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        border-left: 4px solid #6366f1;
+        padding: 2rem;
+        border-radius: 16px;
         margin: 1rem 0;
     }
     
@@ -126,6 +153,25 @@ def inject_css():
         box-shadow: 0 15px 40px rgba(102, 126, 234, 0.5);
     }
     
+    .progress-container {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 0.5rem;
+        margin: 1rem 0;
+    }
+    
+    .progress-bar {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        height: 30px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        transition: width 1s ease;
+    }
+    
     .stTabs [data-baseweb="tab-list"] {
         gap: 1rem;
         background: rgba(255, 255, 255, 0.05);
@@ -148,7 +194,7 @@ def inject_css():
     </style>
     """, unsafe_allow_html=True)
 
-# ==================== GÉNÉRATEUR DE DONNÉES DE BACKTESTING ====================
+# ==================== MOTEUR DE BACKTESTING ====================
 
 class BacktestEngine:
     """Moteur de simulation de performances historiques"""
@@ -173,27 +219,19 @@ class BacktestEngine:
         
         bets = []
         for i in range(num_bets):
-            # Paramètres réalistes
             odds = np.random.uniform(1.5, 4.5)
-            true_prob = 1 / odds + np.random.normal(0, 0.05)  # Vraie probabilité avec bruit
+            true_prob = 1 / odds + np.random.normal(0, 0.05)
             true_prob = np.clip(true_prob, 0.1, 0.9)
             
-            # Le modèle a une précision variable
             model_accuracy = np.random.uniform(0.6, 0.85)
             predicted_prob = true_prob * model_accuracy + (1 - true_prob) * (1 - model_accuracy)
             
-            # Expected Value
             ev = (predicted_prob * odds - 1) * 100
             
-            # Seulement les paris avec EV > 5%
             if ev > 5:
                 home, away = random.choice(teams_pool)
-                
-                # Kelly Criterion pour la mise
                 kelly = (predicted_prob * odds - 1) / (odds - 1)
-                stake_pct = max(0.5, min(5, kelly * 100 * 0.5))  # Half-Kelly, 0.5% à 5%
-                
-                # Résultat du pari
+                stake_pct = max(0.5, min(5, kelly * 100 * 0.5))
                 won = np.random.random() < true_prob
                 
                 bet = {
@@ -226,10 +264,8 @@ class BacktestEngine:
             date = start_date + timedelta(days=day)
             dates.append(date)
             
-            # Générer les paris du jour
             daily_bets = self.generate_realistic_bets(date)
             
-            # Calculer le P&L du jour
             daily_pnl = 0
             for bet in daily_bets:
                 stake_amount = (bet['stake_pct'] / 100) * current_bankroll
@@ -277,22 +313,18 @@ class BacktestEngine:
         total_staked = df['stake_pct'].sum()
         total_profit = self.results['total_profit']
         
-        # Drawdown maximum
         bankroll_series = pd.Series(self.results['daily_bankroll'])
         rolling_max = bankroll_series.expanding().max()
         drawdown = (bankroll_series - rolling_max) / rolling_max * 100
         max_drawdown = drawdown.min()
         
-        # Profit factor
         gross_profit = df[df['profit'] > 0]['profit'].sum()
         gross_loss = abs(df[df['profit'] < 0]['profit'].sum())
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
         
-        # Sharpe Ratio (simplifié)
         daily_returns = pd.Series(self.results['daily_bankroll']).pct_change().dropna()
         sharpe = (daily_returns.mean() / daily_returns.std()) * np.sqrt(365) if daily_returns.std() > 0 else 0
         
-        # Longest winning/losing streak
         df['streak'] = df['won'].ne(df['won'].shift()).cumsum()
         win_streaks = df[df['won']].groupby('streak').size()
         lose_streaks = df[~df['won']].groupby('streak').size()
@@ -320,47 +352,113 @@ class BacktestEngine:
             'worst_day': round(df.groupby('date')['profit'].sum().min(), 2)
         }
 
-# ==================== FONCTIONS DE VISUALISATION ====================
+# ==================== COMPARAISON AVEC PLACEMENTS CLASSIQUES ====================
 
-def create_bankroll_chart(dates, bankroll, initial_bankroll):
-    """Crée le graphique d'évolution de la bankroll"""
+def calculate_investment_comparison(initial_amount, days):
+    """
+    Calcule l'évolution de placements classiques sur la même période
+    """
+    # Taux annuels moyens
+    LIVRET_A_RATE = 0.03  # 3% par an (taux 2024)
+    ACTIONS_RATE = 0.07   # 7% par an (moyenne historique CAC40)
+    CRYPTO_RATE = 0.15    # 15% par an (très volatil, moyenne haussière)
+    
+    # Conversion en taux journalier
+    daily_livret = (1 + LIVRET_A_RATE) ** (1/365) - 1
+    daily_actions = (1 + ACTIONS_RATE) ** (1/365) - 1
+    daily_crypto = (1 + CRYPTO_RATE) ** (1/365) - 1
+    
+    livret_values = [initial_amount]
+    actions_values = [initial_amount]
+    crypto_values = [initial_amount]
+    
+    for day in range(days):
+        # Livret A (croissance linéaire)
+        livret_values.append(livret_values[-1] * (1 + daily_livret))
+        
+        # Actions (croissance avec volatilité)
+        volatility = np.random.normal(0, 0.01)  # 1% de volatilité journalière
+        actions_values.append(actions_values[-1] * (1 + daily_actions + volatility))
+        
+        # Crypto (croissance avec forte volatilité)
+        volatility_crypto = np.random.normal(0, 0.03)  # 3% de volatilité
+        crypto_values.append(crypto_values[-1] * (1 + daily_crypto + volatility_crypto))
+    
+    return {
+        'livret_a': livret_values,
+        'actions': actions_values,
+        'crypto': crypto_values,
+        'livret_final': livret_values[-1],
+        'actions_final': actions_values[-1],
+        'crypto_final': crypto_values[-1],
+        'livret_roi': ((livret_values[-1] - initial_amount) / initial_amount) * 100,
+        'actions_roi': ((actions_values[-1] - initial_amount) / initial_amount) * 100,
+        'crypto_roi': ((crypto_values[-1] - initial_amount) / initial_amount) * 100
+    }
+
+def create_comparison_chart(dates, bot_values, livret_values, actions_values, initial_amount):
+    """Crée un graphique de comparaison des investissements"""
     
     fig = go.Figure()
     
-    # Ligne de la bankroll
+    # Bot de paris
     fig.add_trace(go.Scatter(
         x=dates,
-        y=bankroll[1:],  # Skip initial
+        y=bot_values[1:],
         mode='lines',
-        name='Bankroll',
-        line=dict(color='#667eea', width=3),
+        name='🤖 Bot Paris Foot',
+        line=dict(color='#667eea', width=4),
         fill='tozeroy',
-        fillcolor='rgba(102, 126, 234, 0.2)',
-        hovertemplate='<b>%{x}</b><br>Bankroll: %{y:.2f}€<extra></extra>'
+        fillcolor='rgba(102, 126, 234, 0.1)'
     ))
     
-    # Ligne de référence initiale
+    # Livret A
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=livret_values[1:],
+        mode='lines',
+        name='🏦 Livret A (3%/an)',
+        line=dict(color='#10b981', width=3, dash='dash')
+    ))
+    
+    # Actions
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=actions_values[1:],
+        mode='lines',
+        name='📈 Actions CAC40 (7%/an)',
+        line=dict(color='#f59e0b', width=3, dash='dot')
+    ))
+    
+    # Ligne de référence
     fig.add_trace(go.Scatter(
         x=[dates[0], dates[-1]],
-        y=[initial_bankroll, initial_bankroll],
+        y=[initial_amount, initial_amount],
         mode='lines',
-        name='Bankroll Initiale',
+        name='Capital Initial',
         line=dict(color='#9ca3af', width=2, dash='dash'),
-        hovertemplate='Bankroll initiale: %{y:.2f}€<extra></extra>'
+        showlegend=False
     ))
     
     fig.update_layout(
         title={
-            'text': "📈 Évolution de la Bankroll",
+            'text': "💰 Comparaison: Bot vs Placements Classiques",
             'font': {'size': 24, 'color': 'white'}
         },
         xaxis_title="Date",
-        yaxis_title="Bankroll (€)",
+        yaxis_title="Valeur du Capital (€)",
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white'),
         hovermode='x unified',
-        height=500
+        height=600,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
     
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255,255,255,0.1)')
@@ -368,86 +466,99 @@ def create_bankroll_chart(dates, bankroll, initial_bankroll):
     
     return fig
 
-def create_performance_metrics_chart(stats):
-    """Crée un graphique radar des métriques de performance"""
+# ==================== CALCUL D'OBJECTIFS ====================
+
+def calculate_doubling_time(roi_annual):
+    """
+    Calcule le temps pour doubler la bankroll
+    Utilise la règle de 72 et le ROI annuel
+    """
+    if roi_annual <= 0:
+        return None
     
-    categories = ['Win Rate', 'ROI', 'Profit Factor', 'Sharpe Ratio', 'EV Moyen']
+    # Règle de 72
+    years = 72 / roi_annual
+    days = years * 365
+    months = years * 12
     
-    # Normaliser les valeurs pour le radar (0-100)
-    values = [
-        stats['win_rate'],
-        min(100, (stats['roi'] + 50)),  # Normaliser ROI
-        min(100, stats['profit_factor'] * 30),  # Normaliser PF
-        min(100, (stats['sharpe_ratio'] + 2) * 25),  # Normaliser Sharpe
-        stats['avg_ev']
-    ]
+    return {
+        'days': int(days),
+        'months': round(months, 1),
+        'years': round(years, 1)
+    }
+
+def calculate_growth_projection(initial_amount, roi_annual, target_multiplier=2):
+    """
+    Projette la croissance future et calcule quand l'objectif sera atteint
+    """
+    if roi_annual <= 0:
+        return None
+    
+    daily_rate = (1 + roi_annual/100) ** (1/365) - 1
+    
+    current = initial_amount
+    days = 0
+    projection = [initial_amount]
+    
+    # Calculer jusqu'à atteindre l'objectif (max 5 ans)
+    target = initial_amount * target_multiplier
+    max_days = 365 * 5
+    
+    while current < target and days < max_days:
+        current *= (1 + daily_rate)
+        projection.append(current)
+        days += 1
+    
+    return {
+        'days_to_target': days if current >= target else None,
+        'projection': projection,
+        'achieved': current >= target
+    }
+
+def create_goal_progress_chart(current, target, days_elapsed, days_estimated):
+    """Crée un graphique de progression vers l'objectif"""
+    
+    progress_pct = min(100, (current / target) * 100)
     
     fig = go.Figure()
     
-    fig.add_trace(go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself',
-        fillcolor='rgba(102, 126, 234, 0.3)',
-        line=dict(color='#667eea', width=3),
-        name='Performance'
+    # Barre de progression
+    fig.add_trace(go.Bar(
+        x=[progress_pct],
+        y=['Progression'],
+        orientation='h',
+        marker=dict(
+            color='#667eea',
+            line=dict(color='#764ba2', width=2)
+        ),
+        text=f'{progress_pct:.1f}%',
+        textposition='inside',
+        textfont=dict(size=20, color='white'),
+        hovertemplate=f'<b>{progress_pct:.1f}%</b> de l\'objectif<extra></extra>'
     ))
     
     fig.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 100],
-                gridcolor='rgba(255,255,255,0.2)',
-                color='white'
-            ),
-            angularaxis=dict(
-                gridcolor='rgba(255,255,255,0.2)',
-                color='white'
-            ),
-            bgcolor='rgba(0,0,0,0)'
+        title="🎯 Progression vers l'Objectif de Doublement",
+        xaxis=dict(
+            range=[0, 100],
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False
         ),
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white'),
-        height=400
-    )
-    
-    return fig
-
-def create_monthly_performance(df):
-    """Crée un graphique de performance mensuelle"""
-    
-    df['month'] = pd.to_datetime(df['date']).dt.to_period('M')
-    monthly = df.groupby('month')['profit'].sum().reset_index()
-    monthly['month'] = monthly['month'].astype(str)
-    
-    colors = ['#10b981' if x > 0 else '#ef4444' for x in monthly['profit']]
-    
-    fig = go.Figure(data=[
-        go.Bar(
-            x=monthly['month'],
-            y=monthly['profit'],
-            marker_color=colors,
-            hovertemplate='<b>%{x}</b><br>Profit: %{y:.2f}€<extra></extra>'
-        )
-    ])
-    
-    fig.update_layout(
-        title="💰 Performance Mensuelle",
-        xaxis_title="Mois",
-        yaxis_title="Profit (€)",
+        yaxis=dict(
+            showgrid=False,
+            showticklabels=False
+        ),
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white'),
-        height=400
+        height=150,
+        margin=dict(l=0, r=0, t=60, b=0)
     )
-    
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255,255,255,0.1)', zeroline=True, zerolinecolor='rgba(255,255,255,0.3)')
     
     return fig
 
-# ==================== APPLICATION PRINCIPALE ====================
+# ==================== INTERFACE PRINCIPALE ====================
 
 def main():
     inject_css()
@@ -455,8 +566,8 @@ def main():
     # Header
     st.markdown("""
     <div class="header-pro">
-        <h1>⚽ PronoSmart - Backtesting</h1>
-        <p>Simulation de Performances Historiques</p>
+        <h1>⚽ PronoSmart - Backtesting Avancé</h1>
+        <p>Simulation, Comparaisons & Objectifs de Profit</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -465,7 +576,7 @@ def main():
         st.image("https://img.icons8.com/fluency/96/000000/financial-analytics.png", width=80)
         st.title("Configuration")
         
-        st.markdown("### 💰 Paramètres de Simulation")
+        st.markdown("### 💰 Paramètres")
         
         initial_bankroll = st.number_input(
             "Bankroll Initiale (€)",
@@ -484,46 +595,57 @@ def main():
         )
         
         st.markdown("---")
+        st.markdown("### 🎯 Objectif")
+        
+        target_multiplier = st.selectbox(
+            "Multiplier la bankroll par :",
+            [2, 3, 5, 10],
+            index=0,
+            format_func=lambda x: f"×{x} ({initial_bankroll * x:.0f}€)"
+        )
+        
+        st.markdown("---")
         
         if st.button("🚀 LANCER LE BACKTEST", key="run_backtest"):
             st.session_state['run_backtest'] = True
             st.session_state['backtest_params'] = {
                 'bankroll': initial_bankroll,
-                'days': days
+                'days': days,
+                'target_multiplier': target_multiplier
             }
         
         st.markdown("---")
-        st.caption("💡 Les résultats sont basés sur des données simulées réalistes")
+        st.caption("💡 Simulation avec données réalistes")
     
     # Contenu principal
     if 'run_backtest' not in st.session_state:
+        # Page d'accueil
         st.info("""
-        ### 👋 Bienvenue dans le Module de Backtesting !
+        ### 👋 Module de Backtesting Professionnel
         
-        Ce système vous permet de **simuler les performances passées** du bot sur une période donnée.
+        **Nouvelles fonctionnalités :**
         
-        **Fonctionnalités :**
-        - 📊 Simulation réaliste de paris sur N jours
-        - 💰 Évolution de la bankroll
-        - 📈 Statistiques détaillées (ROI, Win Rate, Sharpe Ratio...)
-        - 🎯 Analyse mensuelle
+        💰 **Comparaison avec placements classiques**
+        - Livret A (3%/an)
+        - Actions CAC40 (7%/an)
+        - Voyez la différence avec le bot !
         
-        **Comment ça marche ?**
-        1. Configurez la bankroll initiale dans la sidebar
-        2. Choisissez la période de simulation
-        3. Cliquez sur "Lancer le Backtest"
+        🎯 **Objectifs de profit**
+        - Calculez le temps pour doubler votre bankroll
+        - Projections de croissance
+        - Timeline précise
         
-        👈 Configurez les paramètres dans la sidebar et lancez !
+        👈 Configurez vos paramètres et lancez le backtest !
         """)
         
-        # Exemple de résultats (preview)
+        # Métriques d'exemple
         col1, col2, col3, col4 = st.columns(4)
         
         examples = [
-            ("📊", "365 Jours", "Période type"),
-            ("💰", "+42.5%", "ROI Moyen"),
-            ("🎯", "62.3%", "Win Rate"),
-            ("⚡", "1.85", "Profit Factor")
+            ("🤖", "+42.5%", "ROI Bot"),
+            ("🏦", "+3.0%", "Livret A"),
+            ("📈", "+7.0%", "Actions"),
+            ("🎯", "1.7 ans", "Pour doubler")
         ]
         
         for col, (icon, value, label) in zip([col1, col2, col3, col4], examples):
@@ -540,26 +662,335 @@ def main():
         # Exécution du backtest
         params = st.session_state['backtest_params']
         
-        with st.spinner('🔄 Simulation en cours... Cela peut prendre quelques secondes...'):
+        with st.spinner('🔄 Simulation en cours...'):
+            # Backtest du bot
             engine = BacktestEngine(
                 initial_bankroll=params['bankroll'],
                 days=params['days']
             )
             results = engine.run_backtest()
             stats = engine.get_statistics()
+            
+            # Comparaison avec placements classiques
+            comparison = calculate_investment_comparison(
+                params['bankroll'],
+                params['days']
+            )
+            
+            # Calcul des objectifs
+            roi_annual = (stats['roi'] / params['days']) * 365
+            doubling_time = calculate_doubling_time(roi_annual)
+            projection = calculate_growth_projection(
+                params['bankroll'],
+                roi_annual,
+                params['target_multiplier']
+            )
         
-        st.success('✅ Backtest terminé !')
+        st.success('✅ Simulation terminée !')
         
-        # Onglets de résultats
+        # Onglets
         tab1, tab2, tab3, tab4 = st.tabs([
+            "💰 Comparaisons",
+            "🎯 Objectifs",
             "📊 Vue d'ensemble",
-            "📈 Performance",
-            "📋 Statistiques",
-            "🔍 Détails"
+            "📋 Statistiques"
         ])
         
-        # TAB 1: VUE D'ENSEMBLE
+        # ========== TAB 1: COMPARAISONS ==========
         with tab1:
+            st.subheader("💰 Bot vs Placements Classiques")
+            
+            # Graphique de comparaison
+            fig_comparison = create_comparison_chart(
+                results['dates'],
+                results['daily_bankroll'],
+                comparison['livret_a'],
+                comparison['actions'],
+                params['bankroll']
+            )
+            st.plotly_chart(fig_comparison, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # Tableau comparatif
+            st.markdown("### 📊 Résultats sur {} jours".format(params['days']))
+            
+            # Créer 3 colonnes pour les comparaisons
+            col1, col2, col3 = st.columns(3)
+            
+            placements = [
+                {
+                    'name': '🤖 Bot Paris Foot',
+                    'final': results['final_bankroll'],
+                    'profit': stats['total_profit'],
+                    'roi': stats['roi'],
+                    'col': col1,
+                    'color': '#667eea'
+                },
+                {
+                    'name': '🏦 Livret A',
+                    'final': comparison['livret_final'],
+                    'profit': comparison['livret_final'] - params['bankroll'],
+                    'roi': comparison['livret_roi'],
+                    'col': col2,
+                    'color': '#10b981'
+                },
+                {
+                    'name': '📈 Actions CAC40',
+                    'final': comparison['actions_final'],
+                    'profit': comparison['actions_final'] - params['bankroll'],
+                    'roi': comparison['actions_roi'],
+                    'col': col3,
+                    'color': '#f59e0b'
+                }
+            ]
+            
+            # Déterminer le gagnant
+            winner = max(placements, key=lambda x: x['roi'])
+            
+            for placement in placements:
+                with placement['col']:
+                    is_winner = placement['name'] == winner['name']
+                    
+                    st.markdown(f"""
+                    <div class="comparison-card">
+                        <h3>{placement['name']}
+                        {' <span class="winner-badge">🏆 GAGNANT</span>' if is_winner else ''}
+                        </h3>
+                        <div style="margin: 1.5rem 0;">
+                            <div style="color: #9ca3af; font-size: 0.9rem;">Capital Final</div>
+                            <div style="font-size: 2.5rem; font-weight: 800; color: {placement['color']};">
+                                {placement['final']:.2f}€
+                            </div>
+                        </div>
+                        <div style="margin: 1rem 0;">
+                            <div style="color: #9ca3af; font-size: 0.9rem;">Profit</div>
+                            <div style="font-size: 1.8rem; font-weight: 700; color: {'#10b981' if placement['profit'] > 0 else '#ef4444'};">
+                                {'+' if placement['profit'] > 0 else ''}{placement['profit']:.2f}€
+                            </div>
+                        </div>
+                        <div>
+                            <div style="color: #9ca3af; font-size: 0.9rem;">ROI</div>
+                            <div style="font-size: 1.5rem; font-weight: 700; color: {placement['color']};">
+                                {'+' if placement['roi'] > 0 else ''}{placement['roi']:.1f}%
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Analyse comparative
+            bot_vs_livret = stats['roi'] - comparison['livret_roi']
+            bot_vs_actions = stats['roi'] - comparison['actions_roi']
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="success-card">
+                    <h3>🎯 Performance Relative</h3>
+                    <ul>
+                        <li><strong>{'+' if bot_vs_livret > 0 else ''}{bot_vs_livret:.1f}%</strong> vs Livret A</li>
+                        <li><strong>{'+' if bot_vs_actions > 0 else ''}{bot_vs_actions:.1f}%</strong> vs Actions</li>
+                        <li>Soit <strong>{abs(stats['total_profit'] - (comparison['livret_final'] - params['bankroll'])):.2f}€</strong> de plus que le Livret A</li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                # Projection sur 5 ans
+                roi_annual = (stats['roi'] / params['days']) * 365
+                
+                projection_5y_bot = params['bankroll'] * ((1 + roi_annual/100) ** 5)
+                projection_5y_livret = params['bankroll'] * ((1 + 0.03) ** 5)
+                projection_5y_actions = params['bankroll'] * ((1 + 0.07) ** 5)
+                
+                st.markdown(f"""
+                <div class="warning-card">
+                    <h3>🔮 Projection sur 5 ans</h3>
+                    <ul>
+                        <li>Bot: <strong>{projection_5y_bot:.2f}€</strong></li>
+                        <li>Livret A: <strong>{projection_5y_livret:.2f}€</strong></li>
+                        <li>Actions: <strong>{projection_5y_actions:.2f}€</strong></li>
+                        <li>Différence: <strong>+{(projection_5y_bot - projection_5y_livret):.2f}€</strong></li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # ========== TAB 2: OBJECTIFS ==========
+        with tab2:
+            st.subheader(f"🎯 Objectif : Multiplier par {params['target_multiplier']}")
+            
+            target_amount = params['bankroll'] * params['target_multiplier']
+            current_amount = results['final_bankroll']
+            
+            # Progression actuelle
+            progress = min(100, (current_amount / target_amount) * 100)
+            
+            st.markdown(f"""
+            <div class="goal-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h3 style="margin: 0;">De {params['bankroll']:.0f}€ à {target_amount:.0f}€</h3>
+                        <p style="color: #9ca3af; margin: 0.5rem 0;">Capital actuel: <strong>{current_amount:.2f}€</strong></p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 3rem; font-weight: 900; color: #6366f1;">
+                            {progress:.0f}%
+                        </div>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" style="width: {progress}%;">
+                        {progress:.1f}%
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Calculs temporels
+            if doubling_time:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">⏱️ Temps pour doubler</div>
+                        <div class="metric-value">{doubling_time['months']:.1f}</div>
+                        <div class="metric-label">Mois</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">📅 Soit en jours</div>
+                        <div class="metric-value">{doubling_time['days']}</div>
+                        <div class="metric-label">Jours</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col3:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-label">🗓️ Ou en années</div>
+                        <div class="metric-value">{doubling_time['years']:.1f}</div>
+                        <div class="metric-label">Années</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Timeline de progression
+            if projection and projection['achieved']:
+                target_date = datetime.now() + timedelta(days=projection['days_to_target'])
+                
+                st.markdown(f"""
+                <div class="success-card">
+                    <h3>✅ Objectif Atteignable !</h3>
+                    <p style="font-size: 1.2rem;">
+                        Au rythme actuel, vous atteindrez <strong>{target_amount:.0f}€</strong> 
+                        dans environ <strong>{projection['days_to_target']} jours</strong>
+                    </p>
+                    <p style="color: #9ca3af;">
+                        Date estimée : <strong>{target_date.strftime('%d %B %Y')}</strong>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Graphique de projection
+                projection_dates = [datetime.now() + timedelta(days=i) for i in range(len(projection['projection']))]
+                
+                fig_proj = go.Figure()
+                
+                fig_proj.add_trace(go.Scatter(
+                    x=projection_dates,
+                    y=projection['projection'],
+                    mode='lines',
+                    name='Projection',
+                    line=dict(color='#667eea', width=3),
+                    fill='tozeroy',
+                    fillcolor='rgba(102, 126, 234, 0.2)'
+                ))
+                
+                # Ligne objectif
+                fig_proj.add_trace(go.Scatter(
+                    x=[projection_dates[0], projection_dates[-1]],
+                    y=[target_amount, target_amount],
+                    mode='lines',
+                    name='Objectif',
+                    line=dict(color='#10b981', width=3, dash='dash')
+                ))
+                
+                fig_proj.update_layout(
+                    title="🚀 Projection de Croissance vers l'Objectif",
+                    xaxis_title="Date",
+                    yaxis_title="Bankroll (€)",
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='white'),
+                    hovermode='x unified',
+                    height=500
+                )
+                
+                st.plotly_chart(fig_proj, use_container_width=True)
+            
+            else:
+                st.markdown(f"""
+                <div class="warning-card">
+                    <h3>⚠️ Objectif Ambitieux</h3>
+                    <p style="font-size: 1.1rem;">
+                        Au rythme actuel, l'objectif de <strong>{target_amount:.0f}€</strong> 
+                        nécessite plus de 5 ans.
+                    </p>
+                    <p style="color: #9ca3af;">
+                        💡 Conseil : Réduisez l'objectif ou augmentez la performance du bot
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Simulation par paliers
+            st.markdown("### 📊 Paliers de Croissance")
+            
+            milestones = [
+                (1.5, "×1.5"),
+                (2, "×2"),
+                (3, "×3"),
+                (5, "×5"),
+                (10, "×10")
+            ]
+            
+            milestone_data = []
+            for mult, label in milestones:
+                target = params['bankroll'] * mult
+                if doubling_time:
+                    # Estimation basée sur le ROI annuel
+                    roi_annual = (stats['roi'] / params['days']) * 365
+                    if roi_annual > 0:
+                        years_needed = np.log(mult) / np.log(1 + roi_annual/100)
+                        months_needed = years_needed * 12
+                    else:
+                        months_needed = float('inf')
+                else:
+                    months_needed = float('inf')
+                
+                milestone_data.append({
+                    'Objectif': label,
+                    'Montant': f"{target:.0f}€",
+                    'Temps estimé': f"{months_needed:.1f} mois" if months_needed < 120 else "10+ ans",
+                    'Réaliste': '✅' if months_needed < 36 else '⚠️' if months_needed < 60 else '❌'
+                })
+            
+            df_milestones = pd.DataFrame(milestone_data)
+            st.dataframe(df_milestones, use_container_width=True, hide_index=True)
+        
+        # ========== TAB 3: VUE D'ENSEMBLE ==========
+        with tab3:
             # Métriques principales
             col1, col2, col3, col4 = st.columns(4)
             
@@ -607,242 +1038,63 @@ def main():
             
             st.markdown("---")
             
-            # Graphique principal
-            fig_bankroll = create_bankroll_chart(
-                results['dates'],
-                results['daily_bankroll'],
-                params['bankroll']
-            )
-            st.plotly_chart(fig_bankroll, use_container_width=True)
+            # Graphique d'évolution de la bankroll
+            fig_bankroll = go.Figure()
             
-            # Résumé
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"""
-                <div class="success-card">
-                    <h3>✅ Points Forts</h3>
-                    <ul>
-                        <li><strong>{stats['won_bets']}</strong> paris gagnés sur <strong>{stats['total_bets']}</strong></li>
-                        <li>Meilleur jour: <strong>+{stats['best_day']:.2f}€</strong></li>
-                        <li>Série de victoires max: <strong>{stats['longest_win_streak']}</strong></li>
-                        <li>EV moyen: <strong>{stats['avg_ev']:.1f}%</strong></li>
-                    </ul>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class="warning-card">
-                    <h3>⚠️ Points d'Attention</h3>
-                    <ul>
-                        <li>Drawdown max: <strong>{stats['max_drawdown']:.1f}%</strong></li>
-                        <li>Pire jour: <strong>{stats['worst_day']:.2f}€</strong></li>
-                        <li>Série de pertes max: <strong>{stats['longest_lose_streak']}</strong></li>
-                        <li>Paris perdus: <strong>{stats['lost_bets']}</strong></li>
-                    </ul>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # TAB 2: PERFORMANCE
-        with tab2:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Graphique radar
-                fig_radar = create_performance_metrics_chart(stats)
-                st.plotly_chart(fig_radar, use_container_width=True)
-            
-            with col2:
-                # Performance mensuelle
-                fig_monthly = create_monthly_performance(results['bets'])
-                st.plotly_chart(fig_monthly, use_container_width=True)
-            
-            # Évolution du ROI
-            bankroll_series = pd.Series(results['daily_bankroll'])
-            roi_series = ((bankroll_series - params['bankroll']) / params['bankroll'] * 100)
-            
-            fig_roi = go.Figure()
-            fig_roi.add_trace(go.Scatter(
+            fig_bankroll.add_trace(go.Scatter(
                 x=results['dates'],
-                y=roi_series[1:],
+                y=results['daily_bankroll'][1:],
                 mode='lines',
+                name='Bankroll',
+                line=dict(color='#667eea', width=3),
                 fill='tozeroy',
-                line=dict(color='#f59e0b', width=3),
-                fillcolor='rgba(245, 158, 11, 0.2)'
+                fillcolor='rgba(102, 126, 234, 0.2)'
             ))
             
-            fig_roi.update_layout(
-                title="📊 Évolution du ROI",
+            fig_bankroll.add_trace(go.Scatter(
+                x=[results['dates'][0], results['dates'][-1]],
+                y=[params['bankroll'], params['bankroll']],
+                mode='lines',
+                name='Bankroll Initiale',
+                line=dict(color='#9ca3af', width=2, dash='dash')
+            ))
+            
+            fig_bankroll.update_layout(
+                title="📈 Évolution de la Bankroll",
                 xaxis_title="Date",
-                yaxis_title="ROI (%)",
+                yaxis_title="Bankroll (€)",
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 font=dict(color='white'),
-                height=400
+                hovermode='x unified',
+                height=500
             )
             
-            st.plotly_chart(fig_roi, use_container_width=True)
+            st.plotly_chart(fig_bankroll, use_container_width=True)
         
-        # TAB 3: STATISTIQUES
-        with tab3:
-            st.subheader("📊 Statistiques Complètes")
+        # ========== TAB 4: STATISTIQUES ==========
+        with tab4:
+            st.subheader("📊 Statistiques Détaillées")
             
             col1, col2, col3 = st.columns(3)
             
-            # Colonne 1: Général
             with col1:
                 st.markdown("### 📋 Général")
                 st.metric("Total Paris", stats['total_bets'])
                 st.metric("Paris Gagnés", f"{stats['won_bets']} ({stats['win_rate']:.1f}%)")
-                st.metric("Paris Perdus", f"{stats['lost_bets']}")
-                st.metric("Mise Totale", f"{stats['total_staked']:.1f}%")
+                st.metric("Paris Perdus", stats['lost_bets'])
             
-            # Colonne 2: Rentabilité
             with col2:
                 st.markdown("### 💰 Rentabilité")
-                profit_delta = "normal" if stats['total_profit'] > 0 else "inverse"
-                st.metric("Profit Total", f"{stats['total_profit']:.2f}€", 
-                         delta=f"{stats['roi']:.1f}% ROI", delta_color=profit_delta)
+                st.metric("ROI", f"{stats['roi']:.1f}%")
                 st.metric("Profit Factor", stats['profit_factor'])
                 st.metric("Sharpe Ratio", stats['sharpe_ratio'])
-                st.metric("Max Drawdown", f"{stats['max_drawdown']:.1f}%")
             
-            # Colonne 3: Analyse
             with col3:
-                st.markdown("### 🎯 Analyse")
-                st.metric("Cote Moy. Gagnée", stats['avg_odds_won'])
-                st.metric("Cote Moy. Perdue", stats['avg_odds_lost'])
+                st.markdown("### 🎯 Performance")
                 st.metric("EV Moyen", f"{stats['avg_ev']:.1f}%")
-                st.metric("Plus Longue Série", f"✅ {stats['longest_win_streak']} / ❌ {stats['longest_lose_streak']}")
-            
-            st.markdown("---")
-            
-            # Distribution des résultats
-            df = results['bets']
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Distribution des profits
-                fig_profit_dist = go.Figure()
-                fig_profit_dist.add_trace(go.Histogram(
-                    x=df['profit'],
-                    nbinsx=50,
-                    marker_color='#667eea',
-                    opacity=0.7
-                ))
-                fig_profit_dist.update_layout(
-                    title="Distribution des Profits par Pari",
-                    xaxis_title="Profit (€)",
-                    yaxis_title="Nombre de Paris",
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white')
-                )
-                st.plotly_chart(fig_profit_dist, use_container_width=True)
-            
-            with col2:
-                # Distribution des cotes
-                fig_odds_dist = go.Figure()
-                fig_odds_dist.add_trace(go.Histogram(
-                    x=df['odds'],
-                    nbinsx=30,
-                    marker_color='#764ba2',
-                    opacity=0.7
-                ))
-                fig_odds_dist.update_layout(
-                    title="Distribution des Cotes",
-                    xaxis_title="Cote",
-                    yaxis_title="Nombre de Paris",
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='white')
-                )
-                st.plotly_chart(fig_odds_dist, use_container_width=True)
-        
-        # TAB 4: DÉTAILS
-        with tab4:
-            st.subheader("🔍 Historique Complet des Paris")
-            
-            # Filtres
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                filter_result = st.selectbox(
-                    "Résultat",
-                    ["Tous", "Gagnés", "Perdus"]
-                )
-            
-            with col2:
-                leagues = ["Toutes"] + sorted(results['bets']['league'].unique().tolist())
-                filter_league = st.selectbox("Ligue", leagues)
-            
-            with col3:
-                sort_by = st.selectbox(
-                    "Trier par",
-                    ["Date (récent)", "Profit", "Cote", "EV"]
-                )
-            
-            # Appliquer les filtres
-            df_filtered = results['bets'].copy()
-            
-            if filter_result == "Gagnés":
-                df_filtered = df_filtered[df_filtered['won'] == True]
-            elif filter_result == "Perdus":
-                df_filtered = df_filtered[df_filtered['won'] == False]
-            
-            if filter_league != "Toutes":
-                df_filtered = df_filtered[df_filtered['league'] == filter_league]
-            
-            # Trier
-            if sort_by == "Date (récent)":
-                df_filtered = df_filtered.sort_values('date', ascending=False)
-            elif sort_by == "Profit":
-                df_filtered = df_filtered.sort_values('profit', ascending=False)
-            elif sort_by == "Cote":
-                df_filtered = df_filtered.sort_values('odds', ascending=False)
-            elif sort_by == "EV":
-                df_filtered = df_filtered.sort_values('ev', ascending=False)
-            
-            # Afficher les résultats
-            st.caption(f"📊 {len(df_filtered)} paris affichés")
-            
-            # Formater pour l'affichage
-            df_display = df_filtered.copy()
-            df_display['date'] = pd.to_datetime(df_display['date']).dt.strftime('%Y-%m-%d')
-            df_display['Résultat'] = df_display['won'].apply(lambda x: '✅ Gagné' if x else '❌ Perdu')
-            df_display['Match'] = df_display['home'] + ' vs ' + df_display['away']
-            
-            # Colonnes à afficher
-            columns_display = ['date', 'league', 'Match', 'odds', 'ev', 'stake_pct', 'Résultat', 'profit']
-            df_final = df_display[columns_display].rename(columns={
-                'date': 'Date',
-                'league': 'Ligue',
-                'odds': 'Cote',
-                'ev': 'EV%',
-                'stake_pct': 'Mise%',
-                'profit': 'Profit€'
-            })
-            
-            # Styler le dataframe
-            def color_profit(val):
-                color = '#10b981' if val > 0 else '#ef4444'
-                return f'color: {color}'
-            
-            styled_df = df_final.style.applymap(color_profit, subset=['Profit€'])
-            
-            st.dataframe(styled_df, use_container_width=True, height=600)
-            
-            # Option d'export
-            st.markdown("---")
-            csv = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Télécharger les données (CSV)",
-                data=csv,
-                file_name=f"backtest_results_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-            )
+                st.metric("Max Drawdown", f"{stats['max_drawdown']:.1f}%")
+                st.metric("Plus Longue Série", f"✅ {stats['longest_win_streak']}")
 
 if __name__ == "__main__":
     main()
