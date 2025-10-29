@@ -1,16 +1,15 @@
 """
-app.py - Bot Paris Foot Pro
-Version Premium avec design professionnel
+app.py - Bot Paris Foot Pro avec Backtesting
+Version avec simulation de performances
 """
 
 import streamlit as st
 import pandas as pd
-import requests
+import numpy as np
 from datetime import datetime, timedelta
-import json
-import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import random
 
 # ==================== CONFIGURATION ====================
 
@@ -21,26 +20,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ==================== STYLE CSS PROFESSIONNEL ====================
+# ==================== STYLE CSS ====================
 
-def inject_professional_css():
+def inject_css():
     st.markdown("""
     <style>
-    /* Import Google Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     
-    /* Reset et base */
-    * {
-        font-family: 'Inter', sans-serif;
-    }
+    * { font-family: 'Inter', sans-serif; }
     
     .stApp {
         background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
         color: #ffffff;
     }
     
-    /* Header personnalisé */
-    .main-header {
+    .header-pro {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
         border-radius: 20px;
@@ -49,195 +43,26 @@ def inject_professional_css():
         text-align: center;
     }
     
-    .main-header h1 {
+    .header-pro h1 {
         font-size: 3rem;
         font-weight: 800;
         margin: 0;
-        background: linear-gradient(135deg, #fff 0%, #e0e7ff 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: white;
     }
     
-    .main-header p {
-        font-size: 1.1rem;
-        opacity: 0.9;
-        margin-top: 0.5rem;
-    }
-    
-    /* Cartes premium */
-    .premium-card {
+    .metric-card {
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 2rem;
-        margin: 1rem 0;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .premium-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-        opacity: 0;
-        transition: opacity 0.3s;
-    }
-    
-    .premium-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
-        border-color: rgba(102, 126, 234, 0.5);
-    }
-    
-    .premium-card:hover::before {
-        opacity: 1;
-    }
-    
-    /* Score badge premium */
-    .score-display {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 3rem;
-        border-radius: 30px;
-        text-align: center;
-        box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .score-display::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        animation: rotate 10s linear infinite;
-    }
-    
-    @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-    }
-    
-    .score-value {
-        font-size: 5rem;
-        font-weight: 900;
-        background: linear-gradient(135deg, #fff 0%, #e0e7ff 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        position: relative;
-        z-index: 1;
-        line-height: 1;
-        margin: 0;
-    }
-    
-    .score-label {
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin-top: 1rem;
-        opacity: 0.9;
-        position: relative;
-        z-index: 1;
-    }
-    
-    /* Cartes de paris améliorées */
-    .bet-card-pro {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
         border-radius: 16px;
         padding: 1.5rem;
-        margin: 1rem 0;
-        border-left: 4px solid #667eea;
-        transition: all 0.3s ease;
-        position: relative;
-    }
-    
-    .bet-card-pro:hover {
-        transform: translateX(10px);
-        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-    }
-    
-    .bet-rank {
-        position: absolute;
-        top: -10px;
-        right: 20px;
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        color: white;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 800;
-        font-size: 1.2rem;
-        box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
-    }
-    
-    .bet-teams {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #ffffff;
-        margin: 0.5rem 0;
-    }
-    
-    .bet-league {
-        color: #9ca3af;
-        font-size: 0.9rem;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .bet-stats {
-        display: flex;
-        gap: 2rem;
-        margin-top: 1rem;
-        flex-wrap: wrap;
-    }
-    
-    .stat-item {
-        flex: 1;
-        min-width: 100px;
-    }
-    
-    .stat-label {
-        color: #9ca3af;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 0.25rem;
-    }
-    
-    .stat-value {
-        font-size: 1.5rem;
-        font-weight: 700;
-    }
-    
-    .stat-ev { color: #10b981; }
-    .stat-odds { color: #f59e0b; }
-    .stat-stake { color: #06b6d4; }
-    .stat-proba { color: #8b5cf6; }
-    
-    /* Métriques améliorées */
-    .metric-pro {
-        background: rgba(255, 255, 255, 0.05);
-        padding: 1.5rem;
-        border-radius: 16px;
-        text-align: center;
         border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
         transition: all 0.3s;
     }
     
-    .metric-pro:hover {
-        background: rgba(255, 255, 255, 0.08);
-        transform: scale(1.05);
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
     }
     
     .metric-value {
@@ -246,17 +71,43 @@ def inject_professional_css():
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        margin: 0.5rem 0;
     }
     
     .metric-label {
         color: #9ca3af;
         font-size: 0.9rem;
-        margin-top: 0.5rem;
         text-transform: uppercase;
         letter-spacing: 1px;
     }
     
-    /* Boutons premium */
+    .success-card {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+        border-left: 4px solid #10b981;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin: 1rem 0;
+    }
+    
+    .warning-card {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+        border-left: 4px solid #f59e0b;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin: 1rem 0;
+    }
+    
+    .stat-big {
+        font-size: 3rem;
+        font-weight: 900;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    
+    .stat-positive { color: #10b981; }
+    .stat-negative { color: #ef4444; }
+    .stat-neutral { color: #f59e0b; }
+    
     .stButton > button {
         width: 100%;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -267,28 +118,14 @@ def inject_professional_css():
         border: none;
         border-radius: 12px;
         transition: all 0.3s;
-        text-transform: uppercase;
-        letter-spacing: 1px;
         box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
     }
     
     .stButton > button:hover {
         transform: translateY(-3px);
         box-shadow: 0 15px 40px rgba(102, 126, 234, 0.5);
-        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
     }
     
-    /* Animation de chargement */
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    
-    .loading {
-        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-    }
-    
-    /* Tabs personnalisés */
     .stTabs [data-baseweb="tab-list"] {
         gap: 1rem;
         background: rgba(255, 255, 255, 0.05);
@@ -302,402 +139,710 @@ def inject_professional_css():
         border-radius: 12px;
         padding: 0.75rem 1.5rem;
         font-weight: 600;
-        border: none;
     }
     
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
     }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a1f3a 0%, #0a0e27 100%);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Success/Error/Warning messages */
-    .stSuccess, .stError, .stWarning, .stInfo {
-        border-radius: 12px;
-        padding: 1rem;
-        border-left: 4px solid;
-    }
-    
-    /* Mobile responsive */
-    @media (max-width: 768px) {
-        .main-header h1 { font-size: 2rem; }
-        .score-value { font-size: 3rem; }
-        .bet-stats { flex-direction: column; gap: 1rem; }
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# ==================== FONCTIONS UTILITAIRES ====================
+# ==================== GÉNÉRATEUR DE DONNÉES DE BACKTESTING ====================
 
-def get_gradient_color(value, max_value=100):
-    """Retourne une couleur en fonction de la valeur"""
-    ratio = value / max_value
-    if ratio >= 0.7:
-        return "#10b981"  # Vert
-    elif ratio >= 0.4:
-        return "#f59e0b"  # Orange
-    else:
-        return "#ef4444"  # Rouge
+class BacktestEngine:
+    """Moteur de simulation de performances historiques"""
+    
+    def __init__(self, initial_bankroll=1000, days=365):
+        self.initial_bankroll = initial_bankroll
+        self.days = days
+        self.results = None
+    
+    def generate_realistic_bets(self, date, avg_bets_per_day=3):
+        """Génère des paris réalistes pour une date donnée"""
+        num_bets = np.random.poisson(avg_bets_per_day)
+        
+        leagues = ["Ligue 1", "Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 2"]
+        teams_pool = [
+            ("PSG", "Marseille"), ("Lyon", "Monaco"), ("Lille", "Lens"),
+            ("Man City", "Liverpool"), ("Arsenal", "Chelsea"), ("Man United", "Tottenham"),
+            ("Real Madrid", "Barcelona"), ("Atlético", "Séville"),
+            ("Bayern", "Dortmund"), ("Leipzig", "Leverkusen"),
+            ("Inter", "Juventus"), ("Milan", "Napoli")
+        ]
+        
+        bets = []
+        for i in range(num_bets):
+            # Paramètres réalistes
+            odds = np.random.uniform(1.5, 4.5)
+            true_prob = 1 / odds + np.random.normal(0, 0.05)  # Vraie probabilité avec bruit
+            true_prob = np.clip(true_prob, 0.1, 0.9)
+            
+            # Le modèle a une précision variable
+            model_accuracy = np.random.uniform(0.6, 0.85)
+            predicted_prob = true_prob * model_accuracy + (1 - true_prob) * (1 - model_accuracy)
+            
+            # Expected Value
+            ev = (predicted_prob * odds - 1) * 100
+            
+            # Seulement les paris avec EV > 5%
+            if ev > 5:
+                home, away = random.choice(teams_pool)
+                
+                # Kelly Criterion pour la mise
+                kelly = (predicted_prob * odds - 1) / (odds - 1)
+                stake_pct = max(0.5, min(5, kelly * 100 * 0.5))  # Half-Kelly, 0.5% à 5%
+                
+                # Résultat du pari
+                won = np.random.random() < true_prob
+                
+                bet = {
+                    'date': date,
+                    'league': random.choice(leagues),
+                    'home': home,
+                    'away': away,
+                    'odds': round(odds, 2),
+                    'predicted_prob': round(predicted_prob * 100, 1),
+                    'true_prob': round(true_prob * 100, 1),
+                    'ev': round(ev, 1),
+                    'stake_pct': round(stake_pct, 2),
+                    'won': won
+                }
+                bets.append(bet)
+        
+        return bets
+    
+    def run_backtest(self):
+        """Exécute le backtest complet"""
+        start_date = datetime.now() - timedelta(days=self.days)
+        
+        all_bets = []
+        daily_bankroll = [self.initial_bankroll]
+        current_bankroll = self.initial_bankroll
+        
+        dates = []
+        
+        for day in range(self.days):
+            date = start_date + timedelta(days=day)
+            dates.append(date)
+            
+            # Générer les paris du jour
+            daily_bets = self.generate_realistic_bets(date)
+            
+            # Calculer le P&L du jour
+            daily_pnl = 0
+            for bet in daily_bets:
+                stake_amount = (bet['stake_pct'] / 100) * current_bankroll
+                
+                if bet['won']:
+                    profit = stake_amount * (bet['odds'] - 1)
+                    daily_pnl += profit
+                    bet['profit'] = round(profit, 2)
+                else:
+                    daily_pnl -= stake_amount
+                    bet['profit'] = round(-stake_amount, 2)
+                
+                bet['bankroll_before'] = round(current_bankroll, 2)
+                all_bets.append(bet)
+            
+            current_bankroll += daily_pnl
+            daily_bankroll.append(current_bankroll)
+        
+        self.results = {
+            'bets': pd.DataFrame(all_bets),
+            'daily_bankroll': daily_bankroll,
+            'dates': dates,
+            'final_bankroll': current_bankroll,
+            'total_profit': current_bankroll - self.initial_bankroll,
+            'roi': ((current_bankroll - self.initial_bankroll) / self.initial_bankroll) * 100
+        }
+        
+        return self.results
+    
+    def get_statistics(self):
+        """Calcule les statistiques de performance"""
+        if self.results is None:
+            return None
+        
+        df = self.results['bets']
+        
+        total_bets = len(df)
+        won_bets = df['won'].sum()
+        lost_bets = total_bets - won_bets
+        win_rate = (won_bets / total_bets * 100) if total_bets > 0 else 0
+        
+        avg_odds_won = df[df['won']]['odds'].mean()
+        avg_odds_lost = df[~df['won']]['odds'].mean()
+        
+        total_staked = df['stake_pct'].sum()
+        total_profit = self.results['total_profit']
+        
+        # Drawdown maximum
+        bankroll_series = pd.Series(self.results['daily_bankroll'])
+        rolling_max = bankroll_series.expanding().max()
+        drawdown = (bankroll_series - rolling_max) / rolling_max * 100
+        max_drawdown = drawdown.min()
+        
+        # Profit factor
+        gross_profit = df[df['profit'] > 0]['profit'].sum()
+        gross_loss = abs(df[df['profit'] < 0]['profit'].sum())
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
+        
+        # Sharpe Ratio (simplifié)
+        daily_returns = pd.Series(self.results['daily_bankroll']).pct_change().dropna()
+        sharpe = (daily_returns.mean() / daily_returns.std()) * np.sqrt(365) if daily_returns.std() > 0 else 0
+        
+        # Longest winning/losing streak
+        df['streak'] = df['won'].ne(df['won'].shift()).cumsum()
+        win_streaks = df[df['won']].groupby('streak').size()
+        lose_streaks = df[~df['won']].groupby('streak').size()
+        
+        longest_win_streak = win_streaks.max() if len(win_streaks) > 0 else 0
+        longest_lose_streak = lose_streaks.max() if len(lose_streaks) > 0 else 0
+        
+        return {
+            'total_bets': total_bets,
+            'won_bets': won_bets,
+            'lost_bets': lost_bets,
+            'win_rate': round(win_rate, 1),
+            'avg_odds_won': round(avg_odds_won, 2) if not pd.isna(avg_odds_won) else 0,
+            'avg_odds_lost': round(avg_odds_lost, 2) if not pd.isna(avg_odds_lost) else 0,
+            'total_staked': round(total_staked, 1),
+            'total_profit': round(total_profit, 2),
+            'roi': round(self.results['roi'], 1),
+            'max_drawdown': round(max_drawdown, 1),
+            'profit_factor': round(profit_factor, 2),
+            'sharpe_ratio': round(sharpe, 2),
+            'longest_win_streak': longest_win_streak,
+            'longest_lose_streak': longest_lose_streak,
+            'avg_ev': round(df['ev'].mean(), 1),
+            'best_day': round(df.groupby('date')['profit'].sum().max(), 2),
+            'worst_day': round(df.groupby('date')['profit'].sum().min(), 2)
+        }
 
-def format_currency(value, bankroll=None):
-    """Formate une valeur en pourcentage ou euros"""
-    if bankroll:
-        euros = (value / 100) * bankroll
-        return f"{value:.2f}% ({euros:.2f}€)"
-    return f"{value:.2f}%"
+# ==================== FONCTIONS DE VISUALISATION ====================
 
-def create_performance_chart(data):
-    """Crée un graphique de performance avancé"""
+def create_bankroll_chart(dates, bankroll, initial_bankroll):
+    """Crée le graphique d'évolution de la bankroll"""
+    
     fig = go.Figure()
     
+    # Ligne de la bankroll
     fig.add_trace(go.Scatter(
-        x=list(range(len(data))),
-        y=data,
-        mode='lines+markers',
-        name='Performance',
+        x=dates,
+        y=bankroll[1:],  # Skip initial
+        mode='lines',
+        name='Bankroll',
         line=dict(color='#667eea', width=3),
-        marker=dict(size=10, color='#764ba2'),
         fill='tozeroy',
-        fillcolor='rgba(102, 126, 234, 0.2)'
+        fillcolor='rgba(102, 126, 234, 0.2)',
+        hovertemplate='<b>%{x}</b><br>Bankroll: %{y:.2f}€<extra></extra>'
+    ))
+    
+    # Ligne de référence initiale
+    fig.add_trace(go.Scatter(
+        x=[dates[0], dates[-1]],
+        y=[initial_bankroll, initial_bankroll],
+        mode='lines',
+        name='Bankroll Initiale',
+        line=dict(color='#9ca3af', width=2, dash='dash'),
+        hovertemplate='Bankroll initiale: %{y:.2f}€<extra></extra>'
     ))
     
     fig.update_layout(
-        title="Évolution de la Performance",
-        xaxis_title="Jours",
-        yaxis_title="Score",
+        title={
+            'text': "📈 Évolution de la Bankroll",
+            'font': {'size': 24, 'color': 'white'}
+        },
+        xaxis_title="Date",
+        yaxis_title="Bankroll (€)",
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white'),
-        hovermode='x unified'
+        hovermode='x unified',
+        height=500
     )
+    
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255,255,255,0.1)')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255,255,255,0.1)')
     
     return fig
 
-def create_stats_gauge(value, title):
-    """Crée une jauge circulaire"""
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=value,
-        title={'text': title, 'font': {'size': 20, 'color': 'white'}},
-        gauge={
-            'axis': {'range': [None, 100], 'tickcolor': "white"},
-            'bar': {'color': "#667eea"},
-            'bgcolor': "rgba(255,255,255,0.1)",
-            'borderwidth': 2,
-            'bordercolor': "rgba(255,255,255,0.2)",
-            'steps': [
-                {'range': [0, 40], 'color': 'rgba(239, 68, 68, 0.3)'},
-                {'range': [40, 70], 'color': 'rgba(245, 158, 11, 0.3)'},
-                {'range': [70, 100], 'color': 'rgba(16, 185, 129, 0.3)'}
-            ],
-        }
+def create_performance_metrics_chart(stats):
+    """Crée un graphique radar des métriques de performance"""
+    
+    categories = ['Win Rate', 'ROI', 'Profit Factor', 'Sharpe Ratio', 'EV Moyen']
+    
+    # Normaliser les valeurs pour le radar (0-100)
+    values = [
+        stats['win_rate'],
+        min(100, (stats['roi'] + 50)),  # Normaliser ROI
+        min(100, stats['profit_factor'] * 30),  # Normaliser PF
+        min(100, (stats['sharpe_ratio'] + 2) * 25),  # Normaliser Sharpe
+        stats['avg_ev']
+    ]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        fillcolor='rgba(102, 126, 234, 0.3)',
+        line=dict(color='#667eea', width=3),
+        name='Performance'
     ))
     
     fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                gridcolor='rgba(255,255,255,0.2)',
+                color='white'
+            ),
+            angularaxis=dict(
+                gridcolor='rgba(255,255,255,0.2)',
+                color='white'
+            ),
+            bgcolor='rgba(0,0,0,0)'
+        ),
         paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font={'color': "white"},
-        height=300
+        font=dict(color='white'),
+        height=400
     )
     
     return fig
 
-# ==================== DONNÉES DE DÉMO ====================
+def create_monthly_performance(df):
+    """Crée un graphique de performance mensuelle"""
+    
+    df['month'] = pd.to_datetime(df['date']).dt.to_period('M')
+    monthly = df.groupby('month')['profit'].sum().reset_index()
+    monthly['month'] = monthly['month'].astype(str)
+    
+    colors = ['#10b981' if x > 0 else '#ef4444' for x in monthly['profit']]
+    
+    fig = go.Figure(data=[
+        go.Bar(
+            x=monthly['month'],
+            y=monthly['profit'],
+            marker_color=colors,
+            hovertemplate='<b>%{x}</b><br>Profit: %{y:.2f}€<extra></extra>'
+        )
+    ])
+    
+    fig.update_layout(
+        title="💰 Performance Mensuelle",
+        xaxis_title="Mois",
+        yaxis_title="Profit (€)",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='white'),
+        height=400
+    )
+    
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(255,255,255,0.1)', zeroline=True, zerolinecolor='rgba(255,255,255,0.3)')
+    
+    return fig
 
-def get_demo_bets():
-    """Génère des paris de démonstration réalistes"""
-    import random
-    
-    leagues = ["Ligue 1", "Premier League", "La Liga", "Bundesliga", "Serie A"]
-    teams = [
-        ("PSG", "Marseille"), ("Lyon", "Monaco"), ("Lille", "Nice"),
-        ("Manchester City", "Liverpool"), ("Arsenal", "Chelsea"),
-        ("Real Madrid", "Barcelona"), ("Atlético", "Séville"),
-        ("Bayern Munich", "Dortmund"), ("Inter Milan", "Juventus")
-    ]
-    
-    bets = []
-    for i in range(8):
-        home, away = random.choice(teams)
-        bets.append({
-            "rank": i + 1,
-            "league": random.choice(leagues),
-            "home": home,
-            "away": away,
-            "odds": round(random.uniform(1.5, 3.5), 2),
-            "proba": round(random.uniform(45, 75), 1),
-            "ev": round(random.uniform(5, 25), 1),
-            "stake": round(random.uniform(1, 4), 2),
-            "bookmaker": random.choice(["Winamax", "Betclic", "Unibet", "ParionsSport"])
-        })
-    
-    return bets
-
-# ==================== INTERFACE PRINCIPALE ====================
+# ==================== APPLICATION PRINCIPALE ====================
 
 def main():
-    inject_professional_css()
+    inject_css()
     
     # Header
     st.markdown("""
-    <div class="main-header">
-        <h1>⚽ PronoSmart</h1>
-        <p>Intelligence Artificielle pour Paris Sportifs Professionnels</p>
+    <div class="header-pro">
+        <h1>⚽ PronoSmart - Backtesting</h1>
+        <p>Simulation de Performances Historiques</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Sidebar configuration
+    # Sidebar
     with st.sidebar:
-        st.image("https://img.icons8.com/fluency/96/000000/football2.png", width=80)
+        st.image("https://img.icons8.com/fluency/96/000000/financial-analytics.png", width=80)
         st.title("Configuration")
         
-        bankroll = st.number_input(
-            "💰 Bankroll (€)",
-            min_value=0.0,
+        st.markdown("### 💰 Paramètres de Simulation")
+        
+        initial_bankroll = st.number_input(
+            "Bankroll Initiale (€)",
+            min_value=100.0,
+            max_value=100000.0,
             value=1000.0,
-            step=100.0,
-            help="Votre capital disponible pour les paris"
+            step=100.0
+        )
+        
+        days = st.slider(
+            "Période (jours)",
+            min_value=30,
+            max_value=730,
+            value=365,
+            step=30
         )
         
         st.markdown("---")
         
-        auto_refresh = st.checkbox("🔄 Actualisation auto", value=False)
-        show_details = st.checkbox("📊 Afficher détails", value=True)
+        if st.button("🚀 LANCER LE BACKTEST", key="run_backtest"):
+            st.session_state['run_backtest'] = True
+            st.session_state['backtest_params'] = {
+                'bankroll': initial_bankroll,
+                'days': days
+            }
         
         st.markdown("---")
-        st.caption("Version Pro 2.0")
-        st.caption("© 2024 PronoSmart")
+        st.caption("💡 Les résultats sont basés sur des données simulées réalistes")
     
-    # Navigation par onglets
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🏠 Dashboard", 
-        "📊 Analyses", 
-        "📈 Performance", 
-        "⚙️ Paramètres"
-    ])
-    
-    # ========== TAB 1: DASHBOARD ==========
-    with tab1:
-        col1, col2 = st.columns([2, 1])
+    # Contenu principal
+    if 'run_backtest' not in st.session_state:
+        st.info("""
+        ### 👋 Bienvenue dans le Module de Backtesting !
         
-        with col1:
-            if st.button("🚀 LANCER L'ANALYSE", key="analyze"):
-                with st.spinner("🔍 Analyse en cours..."):
-                    # Simulation
-                    import time
-                    progress_bar = st.progress(0)
-                    for i in range(100):
-                        time.sleep(0.01)
-                        progress_bar.progress(i + 1)
-                    
-                    st.session_state["bets"] = get_demo_bets()
-                    st.session_state["score"] = 78.5
-                    st.session_state["last_update"] = datetime.now()
-                    
-                    st.success("✅ Analyse terminée !")
-                    st.balloons()
+        Ce système vous permet de **simuler les performances passées** du bot sur une période donnée.
         
-        with col2:
-            if "last_update" in st.session_state:
-                st.info(f"🕐 Dernière màj: {st.session_state['last_update'].strftime('%H:%M')}")
+        **Fonctionnalités :**
+        - 📊 Simulation réaliste de paris sur N jours
+        - 💰 Évolution de la bankroll
+        - 📈 Statistiques détaillées (ROI, Win Rate, Sharpe Ratio...)
+        - 🎯 Analyse mensuelle
         
-        st.markdown("---")
+        **Comment ça marche ?**
+        1. Configurez la bankroll initiale dans la sidebar
+        2. Choisissez la période de simulation
+        3. Cliquez sur "Lancer le Backtest"
         
-        # Score principal
-        if "score" in st.session_state:
-            col1, col2, col3 = st.columns([1, 2, 1])
-            
-            with col2:
-                score = st.session_state["score"]
-                verdict = "EXCELLENT" if score >= 70 else "BON" if score >= 50 else "MOYEN"
-                
+        👈 Configurez les paramètres dans la sidebar et lancez !
+        """)
+        
+        # Exemple de résultats (preview)
+        col1, col2, col3, col4 = st.columns(4)
+        
+        examples = [
+            ("📊", "365 Jours", "Période type"),
+            ("💰", "+42.5%", "ROI Moyen"),
+            ("🎯", "62.3%", "Win Rate"),
+            ("⚡", "1.85", "Profit Factor")
+        ]
+        
+        for col, (icon, value, label) in zip([col1, col2, col3, col4], examples):
+            with col:
                 st.markdown(f"""
-                <div class="score-display">
-                    <div class="score-value">{score:.0f}</div>
-                    <div class="score-label">{verdict}</div>
+                <div class="metric-card">
+                    <div style="font-size: 2rem;">{icon}</div>
+                    <div class="metric-value">{value}</div>
+                    <div class="metric-label">{label}</div>
                 </div>
                 """, unsafe_allow_html=True)
+    
+    else:
+        # Exécution du backtest
+        params = st.session_state['backtest_params']
         
-        st.markdown("---")
+        with st.spinner('🔄 Simulation en cours... Cela peut prendre quelques secondes...'):
+            engine = BacktestEngine(
+                initial_bankroll=params['bankroll'],
+                days=params['days']
+            )
+            results = engine.run_backtest()
+            stats = engine.get_statistics()
         
-        # Métriques
-        if "bets" in st.session_state:
-            bets = st.session_state["bets"]
-            
+        st.success('✅ Backtest terminé !')
+        
+        # Onglets de résultats
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📊 Vue d'ensemble",
+            "📈 Performance",
+            "📋 Statistiques",
+            "🔍 Détails"
+        ])
+        
+        # TAB 1: VUE D'ENSEMBLE
+        with tab1:
+            # Métriques principales
             col1, col2, col3, col4 = st.columns(4)
             
-            metrics = [
-                ("📊", "Paris Trouvés", len(bets), ""),
-                ("💎", "EV Moyen", f"{sum(b['ev'] for b in bets) / len(bets):.1f}", "%"),
-                ("💰", "Mise Totale", f"{sum(b['stake'] for b in bets):.1f}", "%"),
-                ("⚡", "ROI Potentiel", "+12.5", "%")
-            ]
-            
-            for col, (icon, label, value, unit) in zip([col1, col2, col3, col4], metrics):
-                with col:
-                    st.markdown(f"""
-                    <div class="metric-pro">
-                        <div style="font-size: 2rem;">{icon}</div>
-                        <div class="metric-value">{value}{unit}</div>
-                        <div class="metric-label">{label}</div>
+            with col1:
+                profit_class = "stat-positive" if stats['total_profit'] > 0 else "stat-negative"
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">💰 Profit Total</div>
+                    <div class="metric-value {profit_class}">
+                        {'+' if stats['total_profit'] > 0 else ''}{stats['total_profit']:.2f}€
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                roi_class = "stat-positive" if stats['roi'] > 0 else "stat-negative"
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">📈 ROI</div>
+                    <div class="metric-value {roi_class}">
+                        {'+' if stats['roi'] > 0 else ''}{stats['roi']:.1f}%
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">🎯 Win Rate</div>
+                    <div class="metric-value">
+                        {stats['win_rate']:.1f}%
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">⚡ Profit Factor</div>
+                    <div class="metric-value">
+                        {stats['profit_factor']:.2f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
             
             st.markdown("---")
             
-            # Liste des paris
-            st.subheader("🎯 Paris Recommandés")
+            # Graphique principal
+            fig_bankroll = create_bankroll_chart(
+                results['dates'],
+                results['daily_bankroll'],
+                params['bankroll']
+            )
+            st.plotly_chart(fig_bankroll, use_container_width=True)
             
-            for bet in bets[:5]:  # Top 5
+            # Résumé
+            col1, col2 = st.columns(2)
+            
+            with col1:
                 st.markdown(f"""
-                <div class="bet-card-pro">
-                    <div class="bet-rank">{bet['rank']}</div>
-                    <div class="bet-league">{bet['league']}</div>
-                    <div class="bet-teams">{bet['home']} vs {bet['away']}</div>
-                    
-                    <div class="bet-stats">
-                        <div class="stat-item">
-                            <div class="stat-label">Expected Value</div>
-                            <div class="stat-value stat-ev">{bet['ev']:.1f}%</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Cote</div>
-                            <div class="stat-value stat-odds">{bet['odds']:.2f}</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Mise</div>
-                            <div class="stat-value stat-stake">{format_currency(bet['stake'], bankroll)}</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Probabilité</div>
-                            <div class="stat-value stat-proba">{bet['proba']:.1f}%</div>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-top: 1rem; color: #9ca3af; font-size: 0.85rem;">
-                        📍 {bet['bookmaker']}
-                    </div>
+                <div class="success-card">
+                    <h3>✅ Points Forts</h3>
+                    <ul>
+                        <li><strong>{stats['won_bets']}</strong> paris gagnés sur <strong>{stats['total_bets']}</strong></li>
+                        <li>Meilleur jour: <strong>+{stats['best_day']:.2f}€</strong></li>
+                        <li>Série de victoires max: <strong>{stats['longest_win_streak']}</strong></li>
+                        <li>EV moyen: <strong>{stats['avg_ev']:.1f}%</strong></li>
+                    </ul>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="warning-card">
+                    <h3>⚠️ Points d'Attention</h3>
+                    <ul>
+                        <li>Drawdown max: <strong>{stats['max_drawdown']:.1f}%</strong></li>
+                        <li>Pire jour: <strong>{stats['worst_day']:.2f}€</strong></li>
+                        <li>Série de pertes max: <strong>{stats['longest_lose_streak']}</strong></li>
+                        <li>Paris perdus: <strong>{stats['lost_bets']}</strong></li>
+                    </ul>
                 </div>
                 """, unsafe_allow_html=True)
         
-        else:
-            st.info("👆 Cliquez sur 'Lancer l'Analyse' pour commencer")
-    
-    # ========== TAB 2: ANALYSES ==========
-    with tab2:
-        st.subheader("📊 Analyses Détaillées")
+        # TAB 2: PERFORMANCE
+        with tab2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Graphique radar
+                fig_radar = create_performance_metrics_chart(stats)
+                st.plotly_chart(fig_radar, use_container_width=True)
+            
+            with col2:
+                # Performance mensuelle
+                fig_monthly = create_monthly_performance(results['bets'])
+                st.plotly_chart(fig_monthly, use_container_width=True)
+            
+            # Évolution du ROI
+            bankroll_series = pd.Series(results['daily_bankroll'])
+            roi_series = ((bankroll_series - params['bankroll']) / params['bankroll'] * 100)
+            
+            fig_roi = go.Figure()
+            fig_roi.add_trace(go.Scatter(
+                x=results['dates'],
+                y=roi_series[1:],
+                mode='lines',
+                fill='tozeroy',
+                line=dict(color='#f59e0b', width=3),
+                fillcolor='rgba(245, 158, 11, 0.2)'
+            ))
+            
+            fig_roi.update_layout(
+                title="📊 Évolution du ROI",
+                xaxis_title="Date",
+                yaxis_title="ROI (%)",
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color='white'),
+                height=400
+            )
+            
+            st.plotly_chart(fig_roi, use_container_width=True)
         
-        if "bets" in st.session_state:
-            bets = st.session_state["bets"]
-            df = pd.DataFrame(bets)
+        # TAB 3: STATISTIQUES
+        with tab3:
+            st.subheader("📊 Statistiques Complètes")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            # Colonne 1: Général
+            with col1:
+                st.markdown("### 📋 Général")
+                st.metric("Total Paris", stats['total_bets'])
+                st.metric("Paris Gagnés", f"{stats['won_bets']} ({stats['win_rate']:.1f}%)")
+                st.metric("Paris Perdus", f"{stats['lost_bets']}")
+                st.metric("Mise Totale", f"{stats['total_staked']:.1f}%")
+            
+            # Colonne 2: Rentabilité
+            with col2:
+                st.markdown("### 💰 Rentabilité")
+                profit_delta = "normal" if stats['total_profit'] > 0 else "inverse"
+                st.metric("Profit Total", f"{stats['total_profit']:.2f}€", 
+                         delta=f"{stats['roi']:.1f}% ROI", delta_color=profit_delta)
+                st.metric("Profit Factor", stats['profit_factor'])
+                st.metric("Sharpe Ratio", stats['sharpe_ratio'])
+                st.metric("Max Drawdown", f"{stats['max_drawdown']:.1f}%")
+            
+            # Colonne 3: Analyse
+            with col3:
+                st.markdown("### 🎯 Analyse")
+                st.metric("Cote Moy. Gagnée", stats['avg_odds_won'])
+                st.metric("Cote Moy. Perdue", stats['avg_odds_lost'])
+                st.metric("EV Moyen", f"{stats['avg_ev']:.1f}%")
+                st.metric("Plus Longue Série", f"✅ {stats['longest_win_streak']} / ❌ {stats['longest_lose_streak']}")
+            
+            st.markdown("---")
+            
+            # Distribution des résultats
+            df = results['bets']
             
             col1, col2 = st.columns(2)
             
             with col1:
-                # Distribution des EV
-                fig_ev = px.histogram(
-                    df, 
-                    x='ev', 
-                    nbins=20,
-                    title="Distribution des Expected Values",
-                    labels={'ev': 'EV (%)', 'count': 'Nombre'},
-                    color_discrete_sequence=['#667eea']
-                )
-                fig_ev.update_layout(
+                # Distribution des profits
+                fig_profit_dist = go.Figure()
+                fig_profit_dist.add_trace(go.Histogram(
+                    x=df['profit'],
+                    nbinsx=50,
+                    marker_color='#667eea',
+                    opacity=0.7
+                ))
+                fig_profit_dist.update_layout(
+                    title="Distribution des Profits par Pari",
+                    xaxis_title="Profit (€)",
+                    yaxis_title="Nombre de Paris",
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='white')
                 )
-                st.plotly_chart(fig_ev, use_container_width=True)
+                st.plotly_chart(fig_profit_dist, use_container_width=True)
             
             with col2:
                 # Distribution des cotes
-                fig_odds = px.box(
-                    df, 
-                    y='odds',
+                fig_odds_dist = go.Figure()
+                fig_odds_dist.add_trace(go.Histogram(
+                    x=df['odds'],
+                    nbinsx=30,
+                    marker_color='#764ba2',
+                    opacity=0.7
+                ))
+                fig_odds_dist.update_layout(
                     title="Distribution des Cotes",
-                    labels={'odds': 'Cote'},
-                    color_discrete_sequence=['#764ba2']
-                )
-                fig_odds.update_layout(
+                    xaxis_title="Cote",
+                    yaxis_title="Nombre de Paris",
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)',
                     font=dict(color='white')
                 )
-                st.plotly_chart(fig_odds, use_container_width=True)
+                st.plotly_chart(fig_odds_dist, use_container_width=True)
+        
+        # TAB 4: DÉTAILS
+        with tab4:
+            st.subheader("🔍 Historique Complet des Paris")
             
-            # Tableau détaillé
-            st.markdown("### 📋 Tableau Complet")
-            st.dataframe(
-                df.style.background_gradient(subset=['ev'], cmap='RdYlGn'),
-                use_container_width=True,
-                hide_index=True
+            # Filtres
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                filter_result = st.selectbox(
+                    "Résultat",
+                    ["Tous", "Gagnés", "Perdus"]
+                )
+            
+            with col2:
+                leagues = ["Toutes"] + sorted(results['bets']['league'].unique().tolist())
+                filter_league = st.selectbox("Ligue", leagues)
+            
+            with col3:
+                sort_by = st.selectbox(
+                    "Trier par",
+                    ["Date (récent)", "Profit", "Cote", "EV"]
+                )
+            
+            # Appliquer les filtres
+            df_filtered = results['bets'].copy()
+            
+            if filter_result == "Gagnés":
+                df_filtered = df_filtered[df_filtered['won'] == True]
+            elif filter_result == "Perdus":
+                df_filtered = df_filtered[df_filtered['won'] == False]
+            
+            if filter_league != "Toutes":
+                df_filtered = df_filtered[df_filtered['league'] == filter_league]
+            
+            # Trier
+            if sort_by == "Date (récent)":
+                df_filtered = df_filtered.sort_values('date', ascending=False)
+            elif sort_by == "Profit":
+                df_filtered = df_filtered.sort_values('profit', ascending=False)
+            elif sort_by == "Cote":
+                df_filtered = df_filtered.sort_values('odds', ascending=False)
+            elif sort_by == "EV":
+                df_filtered = df_filtered.sort_values('ev', ascending=False)
+            
+            # Afficher les résultats
+            st.caption(f"📊 {len(df_filtered)} paris affichés")
+            
+            # Formater pour l'affichage
+            df_display = df_filtered.copy()
+            df_display['date'] = pd.to_datetime(df_display['date']).dt.strftime('%Y-%m-%d')
+            df_display['Résultat'] = df_display['won'].apply(lambda x: '✅ Gagné' if x else '❌ Perdu')
+            df_display['Match'] = df_display['home'] + ' vs ' + df_display['away']
+            
+            # Colonnes à afficher
+            columns_display = ['date', 'league', 'Match', 'odds', 'ev', 'stake_pct', 'Résultat', 'profit']
+            df_final = df_display[columns_display].rename(columns={
+                'date': 'Date',
+                'league': 'Ligue',
+                'odds': 'Cote',
+                'ev': 'EV%',
+                'stake_pct': 'Mise%',
+                'profit': 'Profit€'
+            })
+            
+            # Styler le dataframe
+            def color_profit(val):
+                color = '#10b981' if val > 0 else '#ef4444'
+                return f'color: {color}'
+            
+            styled_df = df_final.style.applymap(color_profit, subset=['Profit€'])
+            
+            st.dataframe(styled_df, use_container_width=True, height=600)
+            
+            # Option d'export
+            st.markdown("---")
+            csv = df_final.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Télécharger les données (CSV)",
+                data=csv,
+                file_name=f"backtest_results_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
             )
-        
-        else:
-            st.info("Lancez d'abord une analyse dans le Dashboard")
-    
-    # ========== TAB 3: PERFORMANCE ==========
-    with tab3:
-        st.subheader("📈 Suivi de Performance")
-        
-        # Simulation de données historiques
-        import random
-        perf_data = [random.randint(60, 90) for _ in range(30)]
-        
-        # Graphique principal
-        fig = create_performance_chart(perf_data)
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Jauges
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.plotly_chart(create_stats_gauge(78, "Score Moyen"), use_container_width=True)
-        
-        with col2:
-            st.plotly_chart(create_stats_gauge(85, "Taux de Réussite"), use_container_width=True)
-        
-        with col3:
-            st.plotly_chart(create_stats_gauge(92, "Fiabilité"), use_container_width=True)
-    
-    # ========== TAB 4: PARAMÈTRES ==========
-    with tab4:
-        st.subheader("⚙️ Configuration Avancée")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 🎯 Stratégie")
-            
-            risk_level = st.select_slider(
-                "Niveau de risque",
-                options=["Très Prudent", "Prudent", "Équilibré", "Agressif", "Très Agressif"],
-                value="Équilibré"
-            )
-            
-            min_ev = st.slider("EV Minimum (%)", 0, 30, 10)
-            max_stake = st.slider("Mise Maximum (%)", 1, 10, 5)
-            
-        with col2:
-            st.markdown("### 📊 Filtres")
-            
-            min_odds = st.number_input("Cote Minimum", 1.0, 10.0, 1.5, 0.1)
-            max_odds = st.number_input("Cote Maximum", 1.0, 20.0, 5.0, 0.5)
-            
-            selected_leagues = st.multiselect(
-                "Ligues",
-                ["Ligue 1", "Premier League", "La Liga", "Bundesliga", "Serie A"],
-                default=["Ligue 1"]
-            )
-        
-        if st.button("💾 Sauvegarder la Configuration"):
-            st.success("✅ Configuration sauvegardée !")
 
 if __name__ == "__main__":
     main()
